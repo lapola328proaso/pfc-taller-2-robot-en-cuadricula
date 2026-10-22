@@ -1,279 +1,294 @@
-# Ejemplo de informe de corrección
+# Informe de corrección: Taller 2, el robot en la cuadrícula
 
-Fundamentos de Programación Funcional y Concurrente.
-Documento realizado por el docente Juan Francisco Díaz.
+Fundamentos de Programación Funcional y Concurrente
 
-## 1. Argumentar la corrección de programas recursivos
+En este informe explicamos por qué cada función de RobotCuadricula.scala hace lo que el enunciado pide. Seguimos la guía del docente. Para cada función primero decimos qué debería calcular (la especificación), luego mostramos el programa y por último demostramos que los dos coinciden. Como el tipo Orden está definido de forma recursiva, casi todas las demostraciones son por inducción estructural. Para los recorridos con foldLeft usamos el esquema de estado inicial, transformación, invariante y estado final.
 
-Sea $f : A \to B$ una función, y $A$ un conjunto definido recursivamente
-(recordar la definición de Matemáticas Discretas I), como por ejemplo los
-naturales o las listas.
+## 0. Notación
 
-Sea $P_f$ un programa recursivo (lineal o en árbol) desarrollado en Scala (o en
-cualquier lenguaje de programación) hecho para calcular $f$:
+Un estado lo escribimos como $(x, y, d)$, donde $d$ es una de las cuatro direcciones: $N$, $E$, $S$, $O$. El robot arranca en $(0, 0, N)$.
 
-```scala
-def Pf(a: A): B = { // Pf recibe a de tipo A, y devuelve f(a) de tipo B
-  ...
-}
-```
+Los giros de noventa grados son:
 
-¿Cómo argumentar que $P_f(a)$ siempre devuelve $f(a)$ como respuesta? Es decir,
-¿cómo argumentar que $P_f$ es correcto con respecto a su especificación?
+$$
+\mathrm{rot}_D:\ N \mapsto E \mapsto S \mapsto O \mapsto N
+\qquad\qquad
+\mathrm{rot}_I:\ N \mapsto O \mapsto S \mapsto E \mapsto N
+$$
 
-La respuesta es sencilla: demostrando el siguiente teorema.
+Para poder hablar de lo que "hace" una orden, le asociamos a cada orden $o$ una función $E_o$ que lleva un estado en otro. Se define por casos, siguiendo la forma de Orden:
 
-```math
-\forall a \in A : P_f(a) == f(a)
-```
+$$
+\begin{aligned}
+E_{\mathrm{Avanzar}(n)}(x,y,d) &=
+\begin{cases}
+(x,\ y+n,\ d) & \text{si } d = N\\
+(x+n,\ y,\ d) & \text{si } d = E\\
+(x,\ y-n,\ d) & \text{si } d = S\\
+(x-n,\ y,\ d) & \text{si } d = O
+\end{cases}\\[6pt]
+E_{\mathrm{Girar}(s)}(x,y,d) &= (x,\ y,\ \mathrm{rot}_s(d))\\[6pt]
+E_{\mathrm{Repetir}(k,\,o)} &= (E_o)^k\\[6pt]
+E_{\mathrm{Secuencia}([o_1,\ldots,o_m])} &= E_{o_m} \circ \cdots \circ E_{o_1}
+\end{aligned}
+$$
 
-Cuando uno tiene que demostrar que algo se cumple para todos los elementos de
-un conjunto definido recursivamente, es natural usar inducción estructural. En
-términos prácticos, esto significa demostrar que:
+Aquí $(E_o)^k$ es aplicar $E_o$ seguido $k$ veces: si $k \le 0$ es la identidad, y si $k \ge 1$ es $(E_o)^{k-1} \circ E_o$. En la secuencia, la composición se lee de derecha a izquierda, o sea que primero actúa $o_1$. Si la secuencia es vacía, la composición es la identidad.
 
-- Para cada valor básico $a$ de $A$, se tiene que $P_f(a) == f(a)$.
-- Para cada valor $a \in A$ construido recursivamente a partir de otro(s)
-  valor(es) $a' \in A$, se tiene que
-  $P_f(a') == f(a') \rightarrow P_f(a) == f(a)$. (Esta es la hipótesis de
-  inducción).
+Decimos que dos órdenes son **equivalentes**, y lo escribimos $o \equiv o'$, cuando $E_o = E_{o'}$. Dicho en palabras: desde cualquier estado inicial dejan al robot en el mismo estado final.
 
-### Ejemplo: factorial recursivo
+Hay dos hechos sencillos que vamos a usar varias veces:
 
-Sea $f : \mathbb{N} \to \mathbb{N}$ la función que calcula el factorial de un
-número natural, es decir, $f(n) = n!$. Y sea $P_f$ el siguiente programa en
-Scala:
+- **(O1)** $E_{\mathrm{Avanzar}(0)} = \mathrm{id}$. En los cuatro casos se suma o se resta $0$.
+- **(O2)** $E_{\mathrm{Avanzar}(b)} \circ E_{\mathrm{Avanzar}(a)} = E_{\mathrm{Avanzar}(a+b)}$. Avanzar no cambia la dirección, así que los dos avances van hacia el mismo lado y los desplazamientos se suman.
 
-```scala
-def Pf(n: Int): Int = { // Pf recibe n de tipo Int, y devuelve n! de tipo Int
-  if (n == 0) 1 else n * Pf(n - 1)
-}
-```
+## 1. Punto 1: girar
 
-Vamos a demostrar que $\forall n \in \mathbb{N} : P_f(n) == n!$
+**Qué debería calcular.** $\mathrm{girar}(d, s) = \mathrm{rot}_s(d)$ para toda dirección $d$ y todo sentido $s$.
 
-**Caso base:** $n = 0$
+**El programa.** girar hace match sobre la pareja (d, s) y tiene ocho casos, uno por cada pareja posible.
 
-```math
-P_f(0) \rightarrow \text{if } (0 == 0)\ 1 \text{ else } 0 \ast P_f(-1) \rightarrow 1
-```
+**Por qué es correcto.** Las entradas posibles son pocas: cuatro direcciones por dos sentidos. Como Direccion y Sentido son sealed, los ocho casos del match cubren todas las parejas sin repetir ninguna. Basta comparar cada caso con la definición de $\mathrm{rot}$:
 
-Por otro lado, $f(0) = 0! = 1$. Entonces $P_f(0) == f(0)$.
+| $(d, s)$ | resultado del programa | $\mathrm{rot}_s(d)$ |
+|---|---|---|
+| $(N, D)$ | $E$ | $E$ |
+| $(E, D)$ | $S$ | $S$ |
+| $(S, D)$ | $O$ | $O$ |
+| $(O, D)$ | $N$ | $N$ |
+| $(N, I)$ | $O$ | $O$ |
+| $(O, I)$ | $S$ | $S$ |
+| $(S, I)$ | $E$ | $E$ |
+| $(E, I)$ | $N$ | $N$ |
 
-**Caso de inducción:** $n = k + 1$, $k \geq 0$. Hay que demostrar:
-$P_f(k) == f(k) \rightarrow P_f(k + 1) == f(k + 1)$
+Las dos columnas coinciden en las ocho filas, así que girar es correcta. $\blacksquare$
 
-```math
-P_f(k+1) \rightarrow \text{if } (k+1 == 0)\ 1 \text{ else } (k+1) \ast P_f(k) \rightarrow (k+1) \ast P_f(k)
-```
+## 2. Punto 2: ejecutar
 
-Usando la hipótesis de inducción (HI):
+**Qué debería calcular.** Para todo estado $e$ y toda orden $o$:
 
-```math
-\rightarrow (k+1) \ast k! = (k+1)!
-```
+$$
+\mathrm{ejecutar}(e, o) = E_o(e)
+$$
 
-Por lo tanto, $P_f(k + 1) == f(k + 1)$.
+**Demostración.** Vamos por inducción estructural sobre $o$. Hay un caso base por cada orden básica y un caso de inducción por cada orden compuesta.
 
-Concluimos por inducción que $\forall n \in \mathbb{N} : P_f(n) == n!$
+*Caso base, $o = \mathrm{Avanzar}(n)$.* El programa hace match sobre e.mira y cambia $y$ o $x$ según la dirección: suma $n$ a $y$ al norte, suma $n$ a $x$ al este, resta $n$ a $y$ al sur y resta $n$ a $x$ al oeste, sin tocar lo demás. Eso es justamente $E_{\mathrm{Avanzar}(n)}(e)$.
 
-### Ejemplo: el máximo de una lista
+*Caso base, $o = \mathrm{Girar}(s)$.* El programa devuelve e.copy(mira = girar(e.mira, s)). Por el punto 1, girar(e.mira, s) es $\mathrm{rot}_s(d)$, y $x$ e $y$ no cambian. Es $E_{\mathrm{Girar}(s)}(e)$.
 
-Sea $f : \text{List}[\mathbb{N}] \to \mathbb{N}$ la función que calcula el
-máximo de una lista de enteros positivos, no vacía. Y sea $P_f$ el siguiente
-programa en Scala:
+*Caso inductivo, $o = \mathrm{Repetir}(k, o')$.* La hipótesis de inducción nos dice que $\mathrm{ejecutar}(e', o') = E_{o'}(e')$ para cualquier estado $e'$. Con eso, probamos por inducción sobre $k$ esta afirmación:
 
-```scala
-def maxLin(l: List[Int]): Int = {
-  if (l.tail.isEmpty) l.head
-  else math.max(maxLin(l.tail), l.head)
-}
-```
+$$
+Q(k):\quad \forall e',\quad \mathrm{ejecutar}(e', \mathrm{Repetir}(k, o')) = (E_{o'})^k(e')
+$$
 
-Demostraremos que:
+- Si $k \le 0$, la guarda de Repetir devuelve $e'$ sin hacer nada, y $(E_{o'})^k$ es la identidad. Vale $Q(k)$. Este es el caso en que la repetición se detiene.
+- Si $k \ge 1$, el programa ejecuta una vez la orden y repite $k-1$ veces. Por la hipótesis de inducción, ejecutar una vez da $E_{o'}(e')$. Por $Q(k-1)$, las $k-1$ repeticiones siguientes dan $(E_{o'})^{k-1}(E_{o'}(e')) = (E_{o'})^k(e')$. Vale $Q(k)$.
 
-```math
-\forall n \in \mathbb{N} \setminus \{0\} : P_f(\text{List}(a_1, a_2, \ldots, a_n)) == f(\text{List}(a_1, a_2, \ldots, a_n))
-```
+*Caso inductivo, $o = \mathrm{Secuencia}([o_1, \ldots, o_m])$.* Aquí el programa es un foldLeft sobre la lista, así que lo explicamos con el esquema del recorrido:
 
-**Caso base:** $n = 1$
+- **Estado inicial:** $acc_0 = e$.
+- **Transformación:** en el paso $i+1$ se hace $acc_{i+1} = \mathrm{ejecutar}(acc_i, o_{i+1})$.
+- **Invariante:** después de procesar $i$ órdenes, con $0 \le i \le m$,
 
-```math
-P_f(\text{List}(a_1)) \rightarrow \text{if } \text{List}(a_1).\text{tail.isEmpty then } \text{List}(a_1).\text{head else } \ldots \rightarrow \text{List}(a_1).\text{head} \rightarrow a_1
-```
+$$
+acc_i = (E_{o_i} \circ \cdots \circ E_{o_1})(e)
+$$
 
-Por otro lado, $f(\text{List}(a_1)) = a_1$. Entonces
-$P_f(\text{List}(a_1)) == f(\text{List}(a_1))$.
+- **El invariante vale al empezar:** con $i = 0$ la composición está vacía, o sea que es la identidad, y $acc_0 = e$.
+- **El invariante se conserva:** supongamos que vale para $i$. Cada $o_{i+1}$ es una parte de $o$, así que la hipótesis de inducción da $\mathrm{ejecutar}(acc_i, o_{i+1}) = E_{o_{i+1}}(acc_i)$, que es $(E_{o_{i+1}} \circ E_{o_i} \circ \cdots \circ E_{o_1})(e)$. Vale para $i+1$.
+- **Estado final:** la lista tiene $m$ órdenes, así que el recorrido termina en $m$ pasos con $acc_m = (E_{o_m} \circ \cdots \circ E_{o_1})(e) = E_o(e)$.
 
-**Caso de inducción:** $n = k + 1$, $k \geq 1$. Se debe demostrar:
+Con esto quedan cubiertas las cuatro alternativas de Orden. $\blacksquare$
 
-```math
-P_f(\text{List}(b_1, b_2, \ldots, b_k)) == f(\text{List}(b_1, b_2, \ldots, b_k)) \rightarrow P_f(\text{List}(a_1, a_2, \ldots, a_{k+1})) == f(\text{List}(a_1, a_2, \ldots, a_{k+1}))
-```
+Además la recursión termina: en Repetir el número $k$ baja de uno en uno hasta llegar a $0$, y en los demás casos las llamadas se hacen sobre órdenes más pequeñas.
 
-Empecemos por calcular qué devuelve $P_f$ usando el modelo de sustitución:
+## 3. Punto 3: cuantasBasicas y profundidad
 
-```math
-P_f(L) \rightarrow \text{if } L.\text{tail.isEmpty then } L.\text{head else math.max}(P_f(L.\text{tail}), L.\text{head})
-```
+### cuantasBasicas
 
-```math
-\rightarrow \text{math.max}(P_f(\text{List}(a_2, \ldots, a_{k+1})), a_1)
-```
+**Qué debería calcular.** La cantidad de órdenes Avanzar y Girar que se llegan a ejecutar, contando las repeticiones. La escribimos $C(o)$:
 
-Sea $b = P_f(\text{List}(a_2, \ldots, a_{k+1}))$; por la hipótesis de
-inducción, $b = f(\text{List}(a_2, \ldots, a_{k+1}))$. Hay dos posibilidades:
+$$
+\begin{aligned}
+C(\mathrm{Avanzar}(n)) &= 1\\
+C(\mathrm{Girar}(s)) &= 1\\
+C(\mathrm{Repetir}(k, o')) &= \max(k, 0) \cdot C(o')\\
+C(\mathrm{Secuencia}([o_1,\ldots,o_m])) &= \textstyle\sum_{i=1}^{m} C(o_i)
+\end{aligned}
+$$
 
-- Si $\text{math.max}(b, a_1) = b$, entonces $b \geq a_1$ y
- $b == f(\text{List}(a_1, a_2, \ldots, a_{k+1}))$.
-- Si $\text{math.max}(b, a_1) = a_1$, entonces $a_1 \geq b$ y
- $a_1 == f(\text{List}(a_1, a_2, \ldots, a_{k+1}))$.
+**Demostración** de que $\mathrm{cuantasBasicas}(o) = C(o)$, por inducción estructural:
 
-Por lo tanto, $P_f(L) == f(L)$.
+- Avanzar y Girar: el programa devuelve $1$, igual que la definición.
+- $\mathrm{Repetir}(k, o')$: si $k \le 0$ la guarda devuelve $0$, que es $\max(k,0) \cdot C(o')$. Si $k > 0$ el programa devuelve veces por cuantasBasicas(orden), que por la hipótesis de inducción es $k \cdot C(o')$.
+- $\mathrm{Secuencia}(os)$: el programa hace map y luego sum. Por la hipótesis de inducción, el map produce la lista $[C(o_1), \ldots, C(o_m)]$, y sum suma sus elementos. La suma de la lista vacía es $0$, que es lo que da la fórmula con $m = 0$. $\blacksquare$
 
-Concluimos por inducción que:
+### profundidad
 
-```math
-\forall n \in \mathbb{N} \setminus \{0\} : P_f(\text{List}(a_1, a_2, \ldots, a_n)) == f(\text{List}(a_1, a_2, \ldots, a_n))
-```
+**Qué debería calcular.** Los niveles de anidamiento: una orden básica tiene $1$, y una compuesta tiene uno más que su parte más honda. La escribimos $P(o)$:
 
-## 2. Argumentar la corrección de programas iterativos
+$$
+\begin{aligned}
+P(\mathrm{Avanzar}(n)) &= P(\mathrm{Girar}(s)) = 1\\
+P(\mathrm{Repetir}(k, o')) &= 1 + P(o')\\
+P(\mathrm{Secuencia}([o_1,\ldots,o_m])) &= 1 + \max\bigl(\{0\} \cup \{P(o_i)\}_{i=1}^{m}\bigr)
+\end{aligned}
+$$
 
-Para argumentar la corrección de programas iterativos, se debe formalizar cómo
-es la iteración. Esto implica definir:
+**Demostración** de que $\mathrm{profundidad}(o) = P(o)$, por inducción estructural:
 
-- Cómo se representa un estado de la iteración, $s$.
-- Cuál es el estado inicial, $s_0$.
-- Cuál es el estado final (o cómo se reconoce que un estado es final): $s_f$.
-- Qué condición (o predicado) cumple todo estado: $\text{Inv}(s)$ (invariante
-  de la iteración).
-- El mecanismo para pasar de un estado al siguiente: $\text{transformar}(s)$.
-  Si $s_i$ es el estado $i$, entonces $\text{transformar}(s_i) = s_{i+1}$.
-
-Un programa iterativo tiene la siguiente forma:
+- Las básicas devuelven $1$. Coincide.
+- $\mathrm{Repetir}(k, o')$: el programa devuelve 1 más profundidad(orden), que por hipótesis de inducción es $1 + P(o')$. El valor de $k$ no influye.
+- $\mathrm{Secuencia}(os)$: el programa calcula 1 más el máximo de las profundidades de la lista, y lo hace con un foldLeft que empieza en $0$. Por la hipótesis de inducción, el map entrega $[P(o_1), \ldots, P(o_m)]$. El recorrido es:
+    - **Estado inicial:** $acc_0 = 0$.
+    - **Transformación:** $acc_{i+1} = \max(acc_i, P(o_{i+1}))$.
+    - **Invariante:** $acc_i = \max(\{0\} \cup \{P(o_j)\}_{j \le i})$.
+    - **Estado final:** $acc_m = \max(\{0\} \cup \{P(o_j)\}_{j \le m})$.
 
-```scala
-def Pf(a: A): B = { // Pf recibe a de tipo A, y devuelve f(a) de tipo B
-  def Pf_iter(s: Estado): B =
-    if (esFinal(s)) respuesta(s) else Pf_iter(transformar(s))
-  Pf_iter(s0)
-}
-```
+  El invariante vale al empezar, porque $\max(\{0\}) = 0$, y se conserva porque $\max(\max(A), b) = \max(A \cup \{b\})$. Al final el programa suma $1$ y obtiene $P(o)$. Para la secuencia vacía da $1 + 0 = 1$. $\blacksquare$
 
-Demostración de corrección:
+## 4. Punto 4: componer, rutina, aplicarA y transformar
 
-- $\text{Inv}(s_0)$: el estado inicial cumple la condición invariante.
-- Si $(s_i \neq s_f \land \text{Inv}(s_i)) \rightarrow \text{Inv}(\text{transformar}(s_i))$:
-  el nuevo estado cumple la condición invariante si el estado anterior la
-  cumplía.
-- De lo anterior se concluye $\text{Inv}(s_f)$, es decir, el estado final
-  cumple la condición invariante. Luego,
-  $\text{Inv}(s_f) \rightarrow \text{respuesta}(s_f) == f(a)$.
-- Finalmente, demostrar que siempre se llega al estado final $s_f$. Esto
-  implica que
-  $P_f(a) == \text{iter}(s_0) == \text{respuesta}(s_f) == f(a)$.
+### componer
 
-### Ejemplo: factorial iterativo
+**Qué debería calcular.** Componer dos órdenes tiene que equivaler a ejecutar la primera y después la segunda:
 
-Considere el siguiente programa iterativo en Scala para calcular la función
-factorial:
+$$
+E_{\mathrm{componer}(o_1, o_2)} = E_{o_2} \circ E_{o_1}
+$$
 
-```scala
-def Pf(n: Int): Int = { // Pf recibe n de tipo Int, y devuelve n! de tipo Int
-  def Pf_iter(i: Int, n: Int, ac: Int): Int =
-    if (i > n) ac else Pf_iter(i + 1, n, i * ac)
-  Pf_iter(1, n, 1)
-}
-```
+**Demostración.** componer(o1, o2) es Secuencia(List(o1, o2)). Por la definición de $E$ para una secuencia con $m = 2$, su función es $E_{o_2} \circ E_{o_1}$. Y por el teorema del punto 2, ejecutar calcula exactamente eso:
 
-Este programa implementa el siguiente proceso iterativo:
+$$
+\mathrm{ejecutar}(e, \mathrm{componer}(o_1, o_2)) = \mathrm{ejecutar}(\mathrm{ejecutar}(e, o_1),\ o_2)
+$$
 
-- Un estado $s = (i, n, ac)$.
-- El estado inicial es $s_0 = (1, n, 1)$.
-- $(i, n, ac)$ es final si $i > n$, o lo que es lo mismo, si $i = n + 1$.
-- La invariante de ciclo es
-  $\text{Inv}(i, n, ac) \equiv i \leq n + 1 \land ac = (i-1)!$.
-  La invariante de ciclo es una relación que SIEMPRE se cumple en el ciclo.
-- $\text{transformar}((i, n, ac)) = (i+1, n, i \ast ac)$.
+Es decir, ejecutar la orden compuesta es lo mismo que ejecutar sus partes una detrás de la otra. $\blacksquare$
 
-Ahora, demostramos los puntos mencionados:
+Esto se extiende a secuencias más largas. Si $xs$ e $ys$ son dos listas de órdenes, entonces
 
-**1.** $\text{Inv}(s_0)$: el estado inicial cumple la condición invariante.
+$$
+E_{\mathrm{Secuencia}(xs \mathbin{+\!\!+} ys)} = E_{\mathrm{Secuencia}(ys)} \circ E_{\mathrm{Secuencia}(xs)}
+$$
 
-```math
-s_0 = (1, n, 1) \implies 1 \leq n + 1 \land 1 = 0!
-```
+porque la composición de funciones es asociativa: podemos agrupar primero los factores de $xs$ y después los de $ys$. Así, juntar dos secuencias equivale a ejecutar la primera y luego la segunda.
 
-**2.** La invariante se mantiene con la transformación de estados,
-$(s_i \neq s_f \land \text{Inv}(s_i)) \rightarrow \text{Inv}(\text{transformar}(s_i))$:
+### rutina
 
-1. Primer cambio, $i = i + 1$, lo que implica $ac = ((i+1) - 1)! = i!$.
-2. Segundo cambio, $ac = i \ast ac$, entonces $ac = (i - 1)! \ast i = i!$.
-3. Como se puede ver en ambos cambios indicados en la transformación, la
-   invariante se mantiene.
+**Qué debería calcular.** rutina(p)(g)(k) debe repetir $k$ veces "avanzar $p$ y girar hacia $g$":
 
-**3.** $\text{Inv}(s_f) \rightarrow \text{respuesta}(s_f) == f(a)$
+$$
+E_{\mathrm{rutina}(p)(g)(k)} = \bigl(E_{\mathrm{Girar}(g)} \circ E_{\mathrm{Avanzar}(p)}\bigr)^k
+$$
 
-```math
-(n + 1 \leq n + 1) \land ac = ((n+1)-1)! \rightarrow ac == n!
-```
+**Demostración.** El programa devuelve Repetir(k, Secuencia(List(Avanzar(p), Girar(g)))). Por la definición de $E$ para Repetir, su función es la $k$-ésima potencia de la función de la secuencia. Y por la definición para Secuencia con dos órdenes, esa función es $E_{\mathrm{Girar}(g)} \circ E_{\mathrm{Avanzar}(p)}$. Como ejecutar coincide con $E$ (punto 2), queda demostrado. $\blacksquare$
 
-**4.** En cada paso, la componente $i$ del estado incrementa, acercándose a $n+1$.
-Después de $n$ iteraciones, se alcanza $n+1$.
+Por lo que vimos en componer, la rutina equivale a repetir $k$ veces componer(Avanzar(p), Girar(g)), o sea a ejecutar sus dos partes, en orden, en cada vuelta. La currificación no cambia nada: rutina(p)(g) es una función que espera las veces, y cuando las recibe devuelve la orden de arriba.
 
-Esto implica que $P_f(n) == \text{iter}(1, n, 1) == n!$
+### aplicarA
 
-### Ejemplo: el máximo de una lista
+**Qué debería calcular.** Si la lista de estados es $[e_1, \ldots, e_m]$, el resultado debe ser $[E_o(e_1), \ldots, E_o(e_m)]$.
 
-Se desea calcular el máximo de una lista de enteros positivos, no vacía. Sea
-$f : \text{List}[\mathbb{N}] \to \mathbb{N}$ la función que calcula ese valor.
-Y sea $P_f$ el siguiente programa en Scala:
+**Demostración.** El programa es un map que ejecuta la orden sobre cada estado. Un map conserva el orden y el tamaño de la lista, y por el punto 2 ejecutar(e_i, o) vale $E_o(e_i)$. Con la lista vacía devuelve la lista vacía, que es lo que da la fórmula con $m = 0$. $\blacksquare$
 
-```scala
-def maxIt(l: List[Int]): Int = {
-  def maxAux(max: Int, l: List[Int]): Int = {
-    if (l.isEmpty) max
-    else maxAux(math.max(max, l.head), l.tail)
-  }
-  maxAux(l.head, l.tail)
-}
-```
+### transformar
 
-Este programa implementa el siguiente proceso iterativo:
+**Qué debería calcular.** Cambiar cada orden básica $b$ por $f(b)$ y dejar intacta la estructura de las compuestas. Lo escribimos $T(o, f)$:
 
-- Un estado $s = (max, l)$ donde $l = \text{List}(a_i, a_{i+1}, \ldots, a_k)$
-  es una cola de $L$.
-- El estado inicial es
-  $s_0 = (L.\text{head}, L.\text{tail}) = (a_1, \text{List}(a_2, \ldots, a_k))$.
-- $s = (max, l)$ es final si $l$ es vacía.
-- $\text{Inv}(max, l) \equiv l = \text{List}(a_i, a_{i+1}, \ldots, a_k) \land max = f(\text{List}(a_1, a_2, \ldots, a_{i-1}))$.
-- $\text{transformar}((max, l)) = (nmax, l.\text{tail})$ donde $nmax = max$ si
-  $max \geq l.\text{head}$, y $nmax = l.\text{head}$ si no.
+$$
+\begin{aligned}
+T(b, f) &= f(b) \qquad (b \text{ es Avanzar o Girar})\\
+T(\mathrm{Repetir}(k, o'), f) &= \mathrm{Repetir}(k,\ T(o', f))\\
+T(\mathrm{Secuencia}([o_1,\ldots,o_m]), f) &= \mathrm{Secuencia}([T(o_1,f),\ldots,T(o_m,f)])
+\end{aligned}
+$$
 
-Demostración de los puntos:
+**Demostración** de que transformar(o, f) es igual a $T(o, f)$, por inducción estructural. El match pone primero Repetir y Secuencia, y deja el caso basica para lo que sobre. Como Orden es sealed y solo tiene cuatro alternativas, basica solo puede ser Avanzar o Girar.
 
-**1.** $\text{Inv}(s_0)$: el estado inicial cumple la condición invariante.
+- Básicas: el programa devuelve f(basica). Coincide.
+- Repetir: devuelve Repetir(veces, transformar(orden, f)), y por hipótesis de inducción eso es $\mathrm{Repetir}(k, T(o', f))$.
+- Secuencia: aplica transformar a cada elemento con un map, y por hipótesis de inducción cada uno es $T(o_i, f)$. $\blacksquare$
 
-```math
-s_0 = (a_1, \text{List}(a_2, \ldots, a_k)) \implies a_1 = f(\text{List}(a_1))
-```
+**Una consecuencia útil.** Si $f$ no cambia el efecto de las órdenes básicas, es decir $E_{f(b)} = E_b$ para toda básica $b$, entonces $T(o, f) \equiv o$. Se prueba por inducción estructural: en las básicas es justo la hipótesis, y en Repetir y Secuencia sale de que $E$ se arma componiendo, o elevando a una potencia, las funciones de las partes, que no cambian.
 
-**2.** $(s_i \neq s_f \land \text{Inv}(s_i)) \rightarrow \text{Inv}(\text{transformar}(s_i))$
+## 5. Punto 5: simplificar
 
-```math
-\neg\, l.\text{isEmpty} \land l = \text{List}(a_i, a_{i+1}, \ldots, a_k) \land max = f(\text{List}(a_1, a_2, \ldots, a_{i-1}))
-```
+**Qué debería calcular.** Que simplificar no cambie el resultado de ejecutar. Para toda orden $o$:
 
-```math
-\rightarrow l.\text{tail} = \text{List}(a_{i+1}, \ldots, a_k) \land nmax = f(\text{List}(a_1, \ldots, a_i))
-```
+$$
+E_{\mathrm{simplificar}(o)} = E_o
+$$
 
-**3.** $\text{Inv}(s_f) \rightarrow \text{respuesta}(s_f) == f(a)$
+O sea que, para todo estado $e$, ejecutar(e, o) y ejecutar(e, simplificar(o)) dejan el mismo estado. Por el teorema del punto 2, basta trabajar con $E$.
 
-```math
-\text{Inv}((max, \text{List}())) \rightarrow max = f(\text{List}(a_1, \ldots, a_k))
-```
+**Las funciones auxiliares.** simplificar define dos funciones dentro de ella:
 
-**4.** En cada paso, la lista $l$ se reduce, acercándose a ser vacía. Después de
-$k$ iteraciones, $l = \text{List}()$.
+- nada(x) dice si una orden no hace nada: es verdadera para Secuencia(Nil) y para Avanzar(0).
+- juntar(os) recorre una lista y cambia cada pareja de Avanzar seguidos, Avanzar(a) y Avanzar(b), por un solo Avanzar(a + b).
 
-Esto implica que $P_f(L) == \text{maxAux}(L.\text{head}, L.\text{tail}) == f(L)$
+### Resultados previos
+
+**Lema 1 (nada es correcta).** Si nada(x) es verdadera, entonces $E_x = \mathrm{id}$.
+
+*Demostración.* Si $x$ es Secuencia(Nil), su función es la composición vacía, que es la identidad. Si $x$ es Avanzar(0), es la identidad por (O1). $\blacksquare$
+
+**Lema 2 (quitar lo que no hace nada).** Si a una lista de órdenes le quitamos las que cumplen nada, la secuencia que queda es equivalente a la original.
+
+*Demostración.* En la composición $E_{o_m} \circ \cdots \circ E_{o_1}$, cada factor que cumple nada es la identidad por el Lema 1, y quitar un factor identidad no cambia el resultado. $\blacksquare$
+
+**Lema 3 (juntar conserva el efecto).** Para toda lista $os$, $\mathrm{Secuencia}(\mathrm{juntar}(os)) \equiv \mathrm{Secuencia}(os)$. Además, juntar termina.
+
+*Demostración.* Por inducción sobre la longitud de $os$, con un caso por cada rama del match:
+
+- $os$ vacía: juntar devuelve la misma lista vacía.
+- $os = \mathrm{Avanzar}(a) :: \mathrm{Avanzar}(b) :: resto$: el programa llama a juntar con la lista $\mathrm{Avanzar}(a+b) :: resto$, que tiene un elemento menos. Por eso la inducción se puede aplicar, y por eso juntar termina. Por (O2), esa lista es equivalente a $os$, y por la hipótesis de inducción juntar la deja equivalente a sí misma.
+- $os = x :: resto$ (cualquier otro caso): juntar devuelve x seguido de juntar(resto). Por la hipótesis de inducción, juntar(resto) es equivalente a $resto$. Como $E_{\mathrm{Secuencia}(x :: zs)} = E_{\mathrm{Secuencia}(zs)} \circ E_x$, cambiar $resto$ por algo equivalente no cambia el resultado. $\blacksquare$
+
+**Lema 4 (cambiar partes por otras equivalentes).** Si $o_i \equiv o'_i$ para cada $i$, entonces $\mathrm{Secuencia}([o_1, \ldots, o_m]) \equiv \mathrm{Secuencia}([o'_1, \ldots, o'_m])$.
+
+*Demostración.* $E$ de una secuencia es la composición de las funciones de sus partes. Si cada $E_{o_i} = E_{o'_i}$, las dos composiciones son iguales. $\blacksquare$
+
+**Lema 5 (secuencias pequeñas).** $E_{\mathrm{Secuencia}(\mathrm{Nil})} = \mathrm{id}$ y $E_{\mathrm{Secuencia}([x])} = E_x$.
+
+*Demostración.* La primera es la composición vacía. La segunda es la composición de un solo factor. $\blacksquare$
+
+### El teorema
+
+**Teorema.** Para toda orden $o$, $\mathrm{simplificar}(o) \equiv o$.
+
+*Demostración.* Por inducción estructural sobre $o$, revisando las reglas en el mismo orden en que aparecen en el match:
+
+1. **Avanzar(0) se vuelve Secuencia(Nil).** Por (O1) $E_{\mathrm{Avanzar}(0)} = \mathrm{id}$, y por el Lema 5 la secuencia vacía también es la identidad.
+
+2. **Repetir con $k \le 0$ se vuelve Secuencia(Nil).** Por definición $E_{\mathrm{Repetir}(k,o')} = (E_{o'})^k = \mathrm{id}$ cuando $k \le 0$, y la secuencia vacía también es la identidad.
+
+3. **Repetir(1, orden) se vuelve simplificar(orden).** $E_{\mathrm{Repetir}(1, o')} = (E_{o'})^1 = E_{o'}$, y por hipótesis de inducción $E_{\mathrm{simplificar}(o')} = E_{o'}$.
+
+4. **Repetir con $k \ge 2$** (los casos $k \le 1$ ya los tomaron las reglas anteriores). Sea $s = \mathrm{simplificar}(o')$. Por hipótesis de inducción, $E_s = E_{o'}$. Hay dos posibilidades:
+    - Si nada(s) es verdadera: por el Lema 1 $E_s = \mathrm{id}$, así que $E_{o'} = \mathrm{id}$ y $(E_{o'})^k = \mathrm{id}$. El programa devuelve Secuencia(Nil), que también es la identidad. Coinciden.
+    - Si no: el programa devuelve Repetir(k, s), cuya función es $(E_s)^k = (E_{o'})^k$. Coinciden.
+
+5. **Secuencia.** El programa hace cinco cosas, en este orden: simplifica cada elemento, quita los que no hacen nada, aplica juntar, vuelve a quitar los que no hacen nada y mira cuántos elementos quedaron. Cada una conserva el efecto:
+    - Simplificar cada elemento: por hipótesis de inducción $\mathrm{simplificar}(o_i) \equiv o_i$, y por el Lema 4 la secuencia no cambia.
+    - Quitar lo que no hace nada: Lema 2.
+    - juntar: Lema 3.
+    - Quitar de nuevo lo que no hace nada: Lema 2. Este segundo filtro hace falta porque juntar puede producir Avanzar(0), por ejemplo con Avanzar(4) seguido de Avanzar(-4).
+    - La decisión final: si la lista quedó vacía se devuelve Secuencia(Nil), y si quedó un solo elemento se devuelve ese elemento. Ambos son equivalentes a la secuencia por el Lema 5. Si quedaron dos o más, se devuelve la misma secuencia.
+
+6. **Cualquier otra orden** (Girar y Avanzar(n) con $n \ne 0$): se devuelve igual, así que es equivalente a sí misma. $\blacksquare$
+
+**Terminación.** Todas las llamadas recursivas de simplificar son sobre partes más pequeñas de $o$ (lo que hay dentro de un Repetir o los elementos de una secuencia), y juntar termina por el Lema 3. Por eso simplificar termina con cualquier orden.
+
+## 6. Resumen
+
+| Punto | Función | Qué demostramos | Cómo |
+|---|---|---|---|
+| 1 | girar | coincide con $\mathrm{rot}_s(d)$ | revisando los 8 casos |
+| 2 | ejecutar | $\mathrm{ejecutar}(e,o) = E_o(e)$ | inducción estructural y foldLeft con invariante |
+| 3 | cuantasBasicas, profundidad | coinciden con $C(o)$ y $P(o)$ | inducción estructural y foldLeft con invariante |
+| 4 | componer | ejecutar la compuesta es ejecutar sus partes | definición de $E$ y punto 2 |
+| 4 | rutina | equivale a repetir "avanzar y girar" $k$ veces | definición de $E$ y punto 2 |
+| 4 | aplicarA, transformar | coinciden con su especificación | inducción sobre la lista y sobre Orden |
+| 5 | simplificar | no cambia el resultado de ejecutar | inducción estructural, regla por regla, con cinco lemas |
